@@ -1,0 +1,366 @@
+﻿<!DOCTYPE HTML>
+<html>
+<head>
+	<link rel="stylesheet" href="http://code.jquery.com/ui/1.10.2/themes/overcast/jquery-ui.css" />
+	<script src="http://code.jquery.com/jquery-1.10.1.js"></script>
+	<script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js"></script>
+	<script>
+		var numPoints = 7;
+		var maxNumPoints = 17;
+		var skipCount = 3;
+		var maxSkipCount = 3;
+
+		var iterateNumPoints = false;
+		var iterateSkipCount = false;
+		var running = false;
+
+		var clearBetweenSkipCountIterations = false;
+		var clearBetweenNumPointIterations = false;
+
+		var runTimeout = null;
+
+		$(document).ready(function () {
+			fixCheckboxes();
+
+			$("#uxGo").button().click(function (event) {
+				event.preventDefault();
+
+				running = false;
+
+				if (runTimeout) {
+					clearTimeout(runTimeout);
+					runTimeout = null;
+				}
+
+				if (!iterateNumPoints && !iterateSkipCount) {
+					draw(true);
+				}
+				else {
+					if (iterateNumPoints) {
+						$("#uxNumPoints").slider("option", "value", $("#uxNumPoints").slider("option", "min"));
+					}
+					if (iterateSkipCount) {
+						$("#uxSkipCount").slider("option", "value", $("#uxSkipCount").slider("option", "min"));
+					}
+
+					$("#uxGo").attr('disabled', 'disabled');
+					$("#uxStop").removeAttr('disabled');
+					$("#uxOptionsDiv").hide("drop");
+					run(true);
+				}
+			});
+
+			$("#uxStop").button().click(function (event) {
+				running = false;
+
+				if (runTimeout) {
+					clearTimeout(runTimeout);
+					runTimeout = null;
+				}
+
+				$("#uxStop").attr('disabled', 'disabled');
+				$("#uxGo").removeAttr('disabled');
+				$("#uxOptionsDiv").show("drop");
+			});
+
+			$("#uxIterateNumPoints").change(function () {
+				if ($(this).is(":checked")) {
+					iterateNumPoints = true;
+					$("#uxNumPointsDiv").hide("drop",
+					function () {
+						$("#uxMaxNumPointsDiv").show("drop");
+						$("#uxMaxNumPointsLbl").show();
+						$("#uxClearBetweenNumPointIterationsDiv").show("drop");
+					});
+				}
+				else {
+					iterateNumPoints = false;
+					$("#uxClearBetweenNumPointIterationsDiv").hide("drop");
+					$("#uxMaxNumPointsLbl").hide();
+					$("#uxMaxNumPointsDiv").hide("drop", function () { $("#uxNumPointsDiv").show("drop"); });
+				}
+			});
+
+			$("#uxNumPoints").slider({
+				min: 2,
+				max: 256,
+				change: function (event, ui) {
+					numPoints = ui.value;
+					maxSkipCount = toInt(numPoints / 2);
+
+					if (skipCount > maxSkipCount)
+						$("#uxSkipCount").slider("option", "value", maxSkipCount);
+
+					if (running)
+						$("#uxNumPointsLbl").text(numPoints);
+					else
+						$("#uxNumPointsLbl").text(numPoints);
+				},
+				slide: function (event, ui) {
+					$("#uxNumPointsLbl").text(ui.value);
+				}
+			});
+
+			$("#uxMaxNumPoints").slider({
+				min: 2,
+				max: 256,
+				change: function (event, ui) {
+					maxNumPoints = ui.value;
+					$("#uxMaxNumPointsLbl").text("/ " + maxNumPoints);
+				},
+				slide: function (event, ui) {
+					$("#uxMaxNumPointsLbl").text("/ " + ui.value);
+				}
+			});
+
+			$("#uxClearBetweenNumPointIterations").change(function () {
+				clearBetweenNumPointIterations = $(this).is(":checked");
+			});
+
+			$("#uxIterateSkipCount").change(function () {
+				if ($(this).is(":checked")) {
+					iterateSkipCount = true;
+					$("#uxSkipCountDiv").hide("drop", function () { $("#uxClearBetweenSkipCountIterationsDiv").show("drop"); });
+				}
+				else {
+					iterateSkipCount = false;
+					$("#uxClearBetweenSkipCountIterationsDiv").hide("drop", function () { $("#uxSkipCountDiv").show("drop"); });
+				}
+			});
+
+			$("#uxSkipCount").slider({
+				min: 1,
+				max: 128,
+				change: function (event, ui) {
+					skipCount = ui.value;
+					$("#uxSkipCountLbl").text(skipCount);
+				},
+				slide: function (event, ui) {
+					if (ui.value > maxSkipCount)
+						return false;
+
+					$("#uxSkipCountLbl").text(ui.value);
+				}
+			});
+
+			$("#uxClearBetweenSkipCountIterations").change(function () {
+				clearBetweenSkipCountIterations = $(this).is(":checked");
+			});
+
+			$("#uxMaxNumPointsDiv").hide();
+			$("#uxMaxNumPointsLbl").hide();
+			$("#uxClearBetweenNumPointIterationsDiv").hide();
+			$("#uxClearBetweenSkipCountIterationsDiv").hide();
+			$("#uxStop").attr('disabled', 'disabled');
+			$("#uxNumPoints").slider("option", "value", numPoints);
+			$("#uxMaxNumPoints").slider("option", "value", maxNumPoints);
+			$("#uxSkipCount").slider("option", "value", skipCount);
+
+			draw(true);
+		});
+
+		function toInt(value) { return ~ ~value; }
+
+		function fixCheckboxes() {
+			var onClass = "ui-icon-circle-check";
+			var offClass = "ui-icon-circle-close";
+
+			$("input:checked[type=checkbox] ").button({ icons: { primary: onClass} });
+			$("input[type=checkbox]:not(:checked)").button({ icons: { primary: offClass} });
+			$("input[type=checkbox]").click(function () {
+				var swap = function (me, toAdd, toRemove) {
+					// find the LABEL for the checkbox
+					// ... which should be _immediately_ before or after the checkbox
+					var node = me.next();
+					if (node.prop("tag") != "LABEL")
+						node = me.prev();
+
+					// and swap
+					node.children(".ui-button-icon-primary").addClass(toAdd).removeClass(toRemove);
+				};
+
+				var me = $(this);
+				if (me.is(':checked')) {
+					swap($(this), onClass, offClass);
+				} else {
+					swap($(this), offClass, onClass);
+				}
+			});
+		}
+
+		function run(first) {
+			running = true;
+
+			var done = false;
+			var clear = first;
+			if (iterateSkipCount) {
+				if (clearBetweenSkipCountIterations)
+					clear = true;
+
+				if (skipCount < maxSkipCount) {
+					$("#uxSkipCount").slider("option", "value", skipCount + 1);
+				}
+				else {
+					if (iterateNumPoints) {
+						if (clearBetweenNumPointIterations)
+							clear = true;
+
+						$("#uxSkipCount").slider("option", "value", $("#uxSkipCount").slider("option", "min"));
+						if (numPoints < maxNumPoints) {
+							$("#uxNumPoints").slider("option", "value", numPoints + 1);
+						}
+						else {
+							done = true;
+						}
+					}
+					else {
+						done = true;
+					}
+				}
+			} else {
+				if (iterateNumPoints) {
+					if (clearBetweenNumPointIterations)
+						clear = true;
+
+					if (numPoints < maxNumPoints) {
+						$("#uxNumPoints").slider("option", "value", numPoints + 1);
+					}
+					else {
+						done = true;
+					}
+				}
+				else {
+					done = true;
+				}
+			}
+
+			draw(clear);
+			if (!done)
+				runTimeout = setTimeout(function () { run() }, 1000);
+			else {
+				running = false;
+
+				runTimeout = null;
+				$("#uxStop").attr('disabled', 'disabled');
+				$("#uxGo").removeAttr('disabled');
+				$("#uxOptionsDiv").show("drop");
+			}
+		}
+
+		function draw(clear) {
+			var canvas = $("#uxCanvas")[0];
+			var context = canvas.getContext("2d");
+
+			var numPoints = $("#uxNumPoints").slider("option", "value");
+			var skipCount = $("#uxSkipCount").slider("option", "value");
+
+			var points = new Array(2 * numPoints);
+
+			var width = canvas.width;
+			var height = canvas.height;
+
+			var hW = width / 2;
+			var hH = height / 2;
+
+			//var rW = width / 2;
+			//var rH = height / 2;
+
+			//var r = Math.sqrt(rW * rW + rH * rH);
+			var r = Math.min(hW, hH)-1;
+
+			var a = 0;
+			var dA = (2 * Math.PI) / numPoints;
+
+			for (var i = 0; i < numPoints; i++) {
+				var x = r * Math.cos(a) + hW;
+				var y = r * Math.sin(a) + hH;
+				points[i * 2 + 0] = x;
+				points[i * 2 + 1] = y;
+
+				a += dA;
+			}
+
+			if (clear)
+				context.clearRect(0, 0, width, height);
+
+			context.beginPath();
+			context.moveTo(points[0], points[1]);
+			for (var i = skipCount; i != 0; i = (i + skipCount) % numPoints) {
+				var x = points[i * 2 + 0];
+				var y = points[i * 2 + 1];
+				context.lineTo(x, y);
+			}
+			context.lineTo(points[0], points[1]);
+
+			var h = 0;
+			var s = 0;
+			var l = 0;
+			var a = 0.5;
+			context.strokeStyle = "hsla(" + h + ", " + s + "%, " + l + "%, " + a + ")";
+			context.stroke();
+		}
+
+		function save() {
+			var canvas = $("#uxCanvas")[0];
+			var context = canvas.getContext("2d");
+
+			var width = canvas.width;
+			var height = canvas.height;
+
+			var pngData = canvas.toDataURL("image/png");
+			var wi = width + 50;
+			var he = height + 50;
+			var w = window.open("about:blank", "_blank", "width=" + wi + ",height=" + he);
+			w.document.write("<img src='" + pngData + "' />");
+		}
+	</script>
+</head>
+<body>
+	<div>
+		<canvas id="uxCanvas" width="300" height="300" style="border:1px solid black;">Your browser does not support the HTML5 canvas tag.</canvas>
+	</div>
+	<div>Number of points: <span id="uxNumPointsLbl">0</span> <span id="uxMaxNumPointsLbl">/ 0</span></div>
+	<div>Number of points to skip: <span id="uxSkipCountLbl">0</span></div>
+	<hr />
+	<div>
+		<button type="submit" id="uxGo">Go!</button>
+		<button type="submit" id="uxStop">Stop</button>
+	</div>
+	<hr />
+	<div id="uxOptionsDiv">
+		<div>
+			<div id="uxIterateNumPointsDiv">
+				<label for="uxIterateNumPoints">Iterate the number of points</label>
+				<input type="checkbox" id="uxIterateNumPoints"></input>
+			</div>
+			<div id="uxNumPointsDiv">
+				<label for="uxNumPoints">Number of points</label>
+				<div id="uxNumPoints"></div>
+			</div>
+			<div id="uxMaxNumPointsDiv">
+				<label for="uxMaxNumPoints">Maximum number of points</label>
+				<div id="uxMaxNumPoints"></div>
+			</div>
+			<div id="uxClearBetweenNumPointIterationsDiv">
+				<label for="uxClearBetweenNumPointIterations">Clear between number of points iterations</label>
+				<input type="checkbox" id="uxClearBetweenNumPointIterations" />
+			</div>
+		</div>
+		<hr />
+		<div>
+			<div id="uxIterateSkipCountDiv">
+				<label for="uxIterateSkipCount">Iterate the number of points to skip</label>
+				<input type="checkbox" id="uxIterateSkipCount" />
+			</div>
+			<div id="uxSkipCountDiv">
+				<label for="uxSkipCount">Number of points to skip</label>
+				<div id="uxSkipCount"></div>
+			</div>
+			<div id="uxClearBetweenSkipCountIterationsDiv">
+				<label for="uxClearBetweenSkipCountIterations">Clear between skip count iterations</label>
+				<input type="checkbox" id="uxClearBetweenSkipCountIterations" />
+			</div>
+		</div>
+	</div>
+</body>
+</html>

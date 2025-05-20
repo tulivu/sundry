@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<body>
+	<canvas id="myCanvas" style="position: absolute; left: 0px; top: 0px; margin: 0px; border: 0px; padding: 0px;">Your browser does not support the HTML5 canvas tag.</canvas>
+	<script>
+		var characterSize = {
+			dit: 1, // assumed to be 1
+			height: 1,
+			dah: 3,
+			gap: 1,
+			space: 3,
+			line: 1.6666666667,
+		};
+
+		var context;
+		var width;
+		var height;
+		function init() {
+			var canvas = document.getElementById("myCanvas");
+			canvas.width = window.innerWidth;
+			canvas.height = window.innerHeight;
+
+			context = canvas.getContext("2d");
+			width = canvas.width;
+			height = canvas.height;
+
+			context.clearRect(0, 0, width, height);
+		}
+
+		function toInt(value) { return ~ ~value; }
+
+
+		var characters = {
+			"a": ".-",
+			"b": "-...",
+			"c": "-.-.",
+			"d": "-..",
+			"e": ".",
+			"f": "..-.",
+			"g": "--.",
+			"h": "....",
+			"i": "..",
+			"j": ".---",
+			"k": "-.-",
+			"l": ".-..",
+			"m": "--",
+			"n": "-.",
+			"o": "---",
+			"p": ".--.",
+			"q": "--.-",
+			"r": ".-.",
+			"s": "...",
+			"t": "-",
+			"u": "..-",
+			"v": "...-",
+			"w": ".--",
+			"x": "-..-",
+			"y": "-.--",
+			"z": "--..",
+
+			" ": " "
+		};
+
+		function getWidthInDits(value, ditsPerLine) {
+			if (value == " ")
+				return characterSize.space;
+			else if (value.indexOf("-") >= 0)
+				return characterSize.dah;
+			else {
+				if (ditsPerLine > 1 && value.indexOf("..") >= 0) {
+					return characterSize.dah;
+				}
+				return characterSize.dit;
+			}
+		}
+
+		function getTotalWidthInDits(value, ditsPerLine) {
+			var totalWidth = 0;
+			for (var i = 0; i < value.length; i++) {
+				if (i > 0 && value[i] != " " && value[i - 1] != " ")
+					totalWidth += characterSize.gap;
+				totalWidth += getWidthInDits(characters[value[i]], ditsPerLine);
+			}
+			return totalWidth;
+		}
+
+		function getHeightInLines(value, ditsPerLine) {
+			if (value == " ")
+				return 1;
+
+			var lines = 0;
+			var dits = 0;
+			for (var i = 0; i < value.length; i++) {
+				if (value[i] == "-") {
+					dits = 0;
+					lines++;
+				}
+				else {
+					if (dits == 0)
+						lines++;
+
+					dits++;
+					if (dits >= ditsPerLine) {
+						dits = 0;
+					}
+				}
+			}
+
+			return lines;
+		}
+
+		function getMaxHeightInLines(value, ditsPerLine) {
+			var maxHeight = 0;
+			for (var i = 0; i < value.length; i++) {
+				var valueHeight = getHeightInLines(characters[value[i]], ditsPerLine)
+				if (valueHeight > maxHeight)
+					maxHeight = valueHeight;
+			}
+			return maxHeight;
+		}
+
+		function render(value, x0, y0, ditWidth) {
+			var ditsPerLine = Math.round(characterSize.dah / 2);
+
+			var totalWidthInDits = getTotalWidthInDits(value, ditsPerLine);
+			var maxHeightInLines = getMaxHeightInLines(value, ditsPerLine);
+
+			//var ditWidth = rowWidth / (totalWidthInDits + 2);
+			//alert( ditWidth*(totalWidthInDits+2) );
+			
+			var ditHeight = characterSize.height * ditWidth;
+			var lineSpace = characterSize.line * ditWidth;
+
+			for (var i = 0; i < maxHeightInLines; i++) {
+				context.fillRect(x0, y0 + (i * lineSpace), ditWidth*(totalWidthInDits+2), 1);
+				context.fillRect(x0, y0 + (i * lineSpace) + ditHeight, ditWidth*(totalWidthInDits+2), 1);
+			}
+			
+			for (var i = 0; i <= (totalWidthInDits+2); i++) {
+				context.fillRect(x0 + (i*ditWidth), y0, 1, ditHeight + (lineSpace*(maxHeightInLines-1)));
+			}
+
+			var x = x0 + ditWidth;
+			for (var i = 0; i < value.length; i++) {
+				if (i > 0 && value[i] != " " && value[i - 1] != " ") {
+					x += ditWidth * characterSize.gap;
+				}
+
+				var heightInLines = getHeightInLines(characters[value[i]], ditsPerLine);
+				var y = y0 + lineSpace * Math.floor((maxHeightInLines - heightInLines) * 0.5);
+
+				var character = characters[value[i]];
+				var characterWidth = ditWidth * getWidthInDits(character, ditsPerLine);
+
+				if (character != " ") {
+					var y1 = y;
+					var ditCount = 0;
+					for (var j = 0; j < character.length; j++) {
+						if (character[j] == "-") {
+							context.fillRect(x, y1, ditWidth * characterSize.dah, ditHeight);
+							y1 += lineSpace;
+						}
+						else {
+							ditCount++;
+
+							if (j == character.length - 1 || character[j + 1] != ".") {
+								while (ditCount > 0) {
+									var ditsLineCount = Math.min(ditCount, ditsPerLine);
+									var lineWidth = ditWidth * (ditsLineCount + (ditsLineCount - 1));
+									var x1 = x + ((characterWidth - lineWidth) / 2);
+
+									for (var d = 0; d < ditsLineCount; d++) {
+										context.fillRect(x1, y1, ditWidth, ditHeight);
+										x1 += 2 * ditWidth;
+									}
+
+									y1 += lineSpace;
+									ditCount -= ditsLineCount;
+								}
+							}
+						}
+					}
+				}
+
+				x += characterWidth;
+			}
+		}
+
+		init();
+		context.fillStyle = "#000000";
+		//render("hello world");
+		//render("abcdefghijklmnopqrstuvwxyz");
+		//render("andrew loves kelly   kelly loves andrew");
+		//render("big lots tmd fiveevar", 0, 0, 15);
+		render("big lots tmd", 10, 10, 30);
+		render("fiveevar", 10, 150, 30);
+	</script>
+</body>
+</html>

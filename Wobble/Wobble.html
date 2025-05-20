@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<body>
+	<canvas id="myCanvas">Your browser does not support the HTML5 canvas tag.</canvas>
+	<script>
+        var canvas;
+        var context;
+
+        var width;
+        var height;
+        var center;
+        var size;
+
+        var angleDelta = 0.001 * Math.PI;
+
+        var waves;
+
+        function init() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+
+            center = {
+                x: toInt(width / 2),
+                y: toInt(height / 2)
+            };
+            size = Math.min(width, height) / 3;
+
+            canvas = document.getElementById("myCanvas");
+            canvas.width = width;
+            canvas.height = height;
+
+            context = canvas.getContext("2d");
+            context.lineWidth = 10;
+
+            waves = [
+                {
+                    center: 0,
+                    centerDelta: Math.PI / 100,
+                    amplitude: size / 5,
+                    frequency: 10,
+                    phase:0,
+                    length: 0.25,
+                    color: "rgba(0, 0, 0, 1)"
+                },
+                {
+                    center: 0,
+                    centerDelta: Math.PI / 100,
+                    amplitude: size / 10,
+                    frequency: 10,
+                    phase: 0,
+                    length: 0.25,
+                    color: "rgba(255, 255, 255, 1)"
+                },
+                {
+                    center: 0,
+                    centerDelta: Math.PI / 100,
+                    amplitude: size / 10,
+                    frequency: 10,
+                    phase: Math.PI,
+                    length: 0.25,
+                    color: "rgba(255, 255, 255, 1)"
+                }
+                ,
+                {
+                    center: 0,
+                    centerDelta: Math.PI / 100,
+                    amplitude: size / 5,
+                    frequency: 10,
+                    phase: Math.PI,
+                    length: 0.25,
+                    color: "rgba(0, 0, 0, 1)"
+                }
+            ];
+        }
+
+        function run() {
+            //context.clearRect(0, 0, width, height);
+            context.fillStyle = "#777777";
+            context.fillRect(0, 0, width, height);
+
+		    draw();
+		    iterate();
+
+			runTimeout = setTimeout(function () { run(); }, 10);
+		}
+
+        function iterate() {
+            for (var i = 0; i < waves.length; i++) {
+                var wave = waves[i];
+                wave.center += wave.centerDelta;
+                if (wave.center >= 2 * Math.PI) {
+                    wave.center = wave.center - (2 * Math.PI);
+                }
+            }
+		}
+
+        function draw() {
+            for (var i = 0; i < waves.length; i++) {
+                var wave = waves[i];
+                var inverseWaveLength = 1 / wave.length;
+                //var inverseWaveLength = 1 / (wave.length * 0.25);
+                var point0;
+
+                var first = true;
+                context.beginPath();
+
+                for (var a = 0; a < 2 * Math.PI; a += angleDelta) {
+                    var deltaAngle = Math.abs(a-wave.center);
+                    deltaAngle = Math.min(deltaAngle, (2 * Math.PI) - deltaAngle);
+
+                    var deltaAnglePercent = deltaAngle / Math.PI;
+
+                    var s = Math.max(deltaAnglePercent * inverseWaveLength - (inverseWaveLength - 1), 0);
+                    //var s = Math.pow(Math.E, deltaAnglePercent * inverseWaveLength - (inverseWaveLength));
+
+                    var r = size +  (s * wave.amplitude * Math.sin(wave.center + wave.frequency * a + wave.phase));
+
+                    var point =
+                    {
+                        x: center.x + (r * Math.cos(a)),
+                        y: center.y + (r * Math.sin(a)),
+                        //x: toInt(center.x + (r * Math.cos(a))),
+                        //y: toInt(center.y + (r * Math.sin(a))),
+                    };
+
+                    if (first) {
+                        point0 = point;
+                        context.moveTo(point.x, point.y);
+
+                        first = false;
+                    } else {
+                        context.lineTo(point.x, point.y);
+                    }
+                }
+                context.lineTo(point0.x, point0.y);
+
+                context.strokeStyle = wave.color;
+                context.stroke();
+            }
+        }
+
+		function toInt(value) { return ~ ~value; }
+
+		init();
+		var runTimeout = setTimeout(function () { run(); }, 10);
+	</script>
+</body>
+</html>

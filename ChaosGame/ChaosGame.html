@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<body>
+	<div style="clear:both;">
+		<div style="float:left;">
+			<canvas id="myCanvas">Your browser does not support the HTML5 canvas tag.</canvas>
+		</div>
+		<div style="float:right;">
+			<select onchange="initFunction(this.options[this.selectedIndex].value);">
+				<option value="Gasket">Sierpinski Gasket</option>
+				<option value="Carpet">Sierpinski Carpet</option>
+				<option value="Dust">Cantor Dust</option>
+			</select>
+			<input type="button" onclick="initPoints();" value="Start"/>
+		</div>
+	</div>
+
+	<script>
+		var canvas;
+		var context;
+		var imageData;
+		var rawImageData;
+
+		var width = 0;
+		var height = 0;
+		var center = [0, 0];
+		var size = 0;
+
+		var drawTrail;
+		var currentPoints;
+		var numCurrentPoints;
+		var currentPointIndex;
+
+		var drawVertexPoints;
+		var vertexPoints;
+		var numVertexPoints;
+
+		var inset;
+
+		var alpha;
+
+		var running;
+
+		var tempVertexPoints;
+		var tempAlpha;
+
+
+		function initFunction(func) {
+			switch (func) {
+				case "Gasket": Gasket(); break;
+				case "Carpet": Carpet(); break;
+				case "Dust": Dust(); break;
+			}
+		}
+
+		function init() {
+			running = false;
+
+			inset = 5;
+
+			canvas = document.getElementById("myCanvas");
+			canvas.height = window.innerHeight - 50;
+			canvas.width = window.innerWidth - 200;
+
+			width = canvas.width;
+			height = canvas.height;
+
+			center = [width / 2, height / 2];
+			size = width * height;
+
+			context = canvas.getContext("2d");
+
+			imageData = context.createImageData(width, height);
+			rawImageData = imageData.data;
+
+			drawTrail = true;
+			currentPoints = [];
+			numCurrentPoints = 0;
+			currentPointIndex = 0;
+		}
+
+		function initPoints() {
+			vertexPoints = tempVertexPoints;
+			alpha = tempAlpha;
+
+			var i, v, x, y;
+			for (i = 0; i < size; i++) {
+				rawImageData[4 * i + 0] = 255;
+				rawImageData[4 * i + 1] = 255;
+				rawImageData[4 * i + 2] = 255;
+				rawImageData[4 * i + 3] = 255;
+			}
+
+			drawVertexPoints = true;
+			numVertexPoints = vertexPoints.length / 2;
+			for (v = 0; v < numVertexPoints; v++) {
+				x = vertexPoints[2 * v];
+				y = vertexPoints[2 * v + 1];
+				i = x + y * width;
+			}
+
+			drawTrail = true;
+			currentPoints = [];
+			numCurrentPoints = 30;
+			for (var i = 0; i < numCurrentPoints; i++) {
+				currentPoints[i * 3 + 0] = 0;
+				currentPoints[i * 3 + 1] = 0;
+				currentPoints[i * 3 + 2] = 0;
+			}
+			currentPointIndex = 0;
+
+			running = true;
+		}
+
+		function Gasket() {
+			tempVertexPoints = [
+		        center[0], inset,
+		        inset, height - 1 - inset,
+		        width - 1 - inset, height - 1 - inset
+			];
+
+			tempAlpha = 1 / 2;
+		}
+
+		function Carpet() {
+			tempVertexPoints = [
+		        inset, inset,
+		        inset, height - 1 - inset,
+		        width - 1 - inset, height - 1 - inset,
+		        width - 1 - inset, inset,
+		        0, 0,
+		        0, 0,
+		        0, 0,
+		        0, 0
+			];
+			tempVertexPoints[8] = (tempVertexPoints[0] + tempVertexPoints[2]) / 2;
+			tempVertexPoints[9] = (tempVertexPoints[1] + tempVertexPoints[3]) / 2;
+
+			tempVertexPoints[10] = (tempVertexPoints[2] + tempVertexPoints[4]) / 2;
+			tempVertexPoints[11] = (tempVertexPoints[3] + tempVertexPoints[5]) / 2;
+
+			tempVertexPoints[12] = (tempVertexPoints[4] + tempVertexPoints[6]) / 2;
+			tempVertexPoints[13] = (tempVertexPoints[5] + tempVertexPoints[7]) / 2;
+
+			tempVertexPoints[14] = (tempVertexPoints[6] + tempVertexPoints[0]) / 2;
+			tempVertexPoints[15] = (tempVertexPoints[7] + tempVertexPoints[1]) / 2;
+
+			tempAlpha = 2 / 3;
+		}
+
+		function Dust() {
+			tempVertexPoints = [
+		        inset, inset,
+		        inset, height - 1 - inset,
+		        width - 1 - inset, height - 1 - inset,
+		        width - 1 - inset, inset
+			];
+
+			tempAlpha = 2 / 3;
+		}
+
+		function run() {
+			if (running) {
+				draw();
+				iterate();
+			}
+
+			runTimeout = setTimeout(function () { run(); }, 30);
+		}
+
+		function iterate() {
+			var cx = currentPoints[3 * currentPointIndex + 0];
+			var cy = currentPoints[3 * currentPointIndex + 1];
+
+			var v = toInt(Math.random() * numVertexPoints);
+			var vx = vertexPoints[2 * v];
+			var vy = vertexPoints[2 * v + 1];
+
+			cx = (1 - alpha) * cx + (alpha) * vx;
+			cy = (1 - alpha) * cy + (alpha) * vy;
+
+			currentPointIndex++;
+			if (currentPointIndex == numCurrentPoints)
+				currentPointIndex = 0;
+
+			currentPoints[currentPointIndex * 3 + 0] = cx;
+			currentPoints[currentPointIndex * 3 + 1] = cy;
+			currentPoints[currentPointIndex * 3 + 2] = 1;
+		}
+
+		function draw() {
+			var i, gradient, nextPointIndex, prevPointIndex, px, py, pa, nx, ny, na;
+
+			i = toInt(currentPoints[3 * currentPointIndex + 0]) + toInt(currentPoints[3 * currentPointIndex + 1]) * width;
+			rawImageData[4 * i + 0] = Math.max(toInt(rawImageData[4 * i + 0] * 0.5), 0);
+			rawImageData[4 * i + 1] = Math.max(toInt(rawImageData[4 * i + 1] * 0.5), 0);
+			rawImageData[4 * i + 2] = Math.max(toInt(rawImageData[4 * i + 2] * 0.5), 0);
+
+			//rawImageData[4 * i + 0] = 0;
+			//rawImageData[4 * i + 1] = 0;
+			//rawImageData[4 * i + 2] = 0;
+
+			context.putImageData(imageData, 0, 0);
+
+			if (drawVertexPoints) {
+				for (i = 0; i < numVertexPoints; i++) {
+					context.beginPath();
+					context.arc(
+				        vertexPoints[i * 2 + 0], vertexPoints[i * 2 + 1],
+				        3,
+				        0, 2 * Math.PI);
+					context.fillStyle = "#000000";
+					context.fill();
+				}
+			}
+
+			if (drawTrail) {
+				prevPointIndex = currentPointIndex + 1;
+				if (prevPointIndex == numCurrentPoints)
+					prevPointIndex = 0;
+
+				nextPointIndex = prevPointIndex + 1;
+				if (nextPointIndex == numCurrentPoints)
+					nextPointIndex = 0;
+
+				for (i = 0; i < numCurrentPoints - 1; i++) {
+					px = currentPoints[3 * prevPointIndex + 0];
+					py = currentPoints[3 * prevPointIndex + 1];
+					pa = currentPoints[3 * prevPointIndex + 2];
+
+					currentPoints[3 * prevPointIndex + 2] -= 1 / (numCurrentPoints - 1);
+					if (currentPoints[3 * prevPointIndex + 2] < 0)
+						currentPoints[3 * prevPointIndex + 2] = 0;
+
+					nx = currentPoints[3 * nextPointIndex + 0];
+					ny = currentPoints[3 * nextPointIndex + 1];
+					na = currentPoints[3 * nextPointIndex + 2];
+
+					context.beginPath();
+
+					gradient = context.createLinearGradient(px, py, nx, ny);
+					gradient.addColorStop("0", "rgba(0, 0, 0, " + pa + ")");
+					gradient.addColorStop("1", "rgba(0, 0, 0, " + na + ")");
+					context.strokeStyle = gradient;
+					//context.strokeStyle = "#000000";
+
+					context.moveTo(px, py);
+					context.lineTo(nx, ny);
+
+					context.stroke();
+
+					prevPointIndex = nextPointIndex;
+
+					nextPointIndex++;
+					if (nextPointIndex == numCurrentPoints)
+						nextPointIndex = 0;
+				}
+			}
+		}
+
+		function toInt(value) { return ~ ~value; }
+
+		init();
+		Gasket();
+		initPoints();
+		
+		var runTimeout = setTimeout(function () { run(); }, 10);
+	</script>
+</body>
+</html>

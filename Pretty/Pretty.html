@@ -1,0 +1,475 @@
+﻿<!DOCTYPE HTML>
+<html>
+<head>
+	<link rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.1/themes/base/jquery-ui.css">
+	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
+	<script src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js"></script>
+	<script>
+		var minNumChildren = 2;
+		var maxNumChildren = 6;
+
+		var restrictNumLevels = true;
+		var maxNumLevels = 6;
+
+		var restrictNumPoints = true;
+		var maxNumPoints = 5000;
+
+		var restrictFPS = true;
+		var minFPS = 15;
+
+		var frameCount = 0;
+		var frameCountStart = new Date().getTime();
+		var slowCount = 0;
+
+		var context;
+		var canvas;
+		var width;
+		var height;
+
+		var scale = 1;
+
+		var runTimeout;
+
+		$(function () {
+			$("#uxNumChildrenSlider").slider({
+				range: true,
+				min: 2,
+				max: 20,
+				values: [minNumChildren, maxNumChildren],
+				slide: function (event, ui) {
+					minNumChildren = ui.values[0];
+					maxNumChildren = ui.values[1];
+					displayNumChildren();
+				}
+			});
+
+			$("#uxRestrictNumLevels").prop("checked", restrictNumLevels);
+			$("#uxRestrictNumLevels").button()
+				.change(function () {
+					restrictNumLevels = $(this).is(":checked");
+					if (!restrictNumLevels && !restrictNumPoints) {
+						$("#uxRestrictNumPoints").prop("checked", true);
+						$("#uxRestrictNumPoints").change();
+					}
+				});
+
+			$("#uxMaxNumLevelsSlider").slider({
+				range: "min",
+				min: 2,
+				max: 20,
+				value: maxNumLevels,
+				slide: function (event, ui) {
+					maxNumLevels = ui.value;
+					displayMaxNumLevels();
+				}
+			});
+
+			$("#uxRestrictNumPoints").prop("checked", restrictNumPoints);
+			$("#uxRestrictNumPoints").button()
+				.change(function () {
+					restrictNumPoints = $(this).is(":checked");
+					if (!restrictNumPoints && !restrictNumLevels) {
+						$("#uxRestrictNumLevels").prop("checked", true);
+						$("#uxRestrictNumLevels").change();
+					}
+				});
+
+			$("#uxMaxNumPointsSlider").slider({
+				range: "min",
+				min: 100,
+				max: 100000,
+				value: maxNumPoints,
+				slide: function (event, ui) {
+					maxNumPoints = ui.value;
+					displayMaxNumPoints();
+				}
+			});
+
+			$("#uxRestrictFPS").prop("checked", restrictFPS);
+			$("#uxRestrictFPS").button()
+				.change(function () {
+					restrictFPS = $(this).is(":checked");
+				});
+
+			$("#uxMinFPSSlider").slider({
+				range: "min",
+				min: 1,
+				max: 30,
+				value: minFPS,
+				slide: function (event, ui) {
+					minFPS = ui.value;
+					displayMinFPS();
+				}
+			});
+
+			$("#uxNew").button()
+				.click(function (event) {
+					event.preventDefault();
+					restart();
+				});
+
+			displayNumChildren();
+			displayMaxNumLevels();
+			displayMaxNumPoints();
+			displayMinFPS();
+
+			restart();
+		});
+
+		function displayNumChildren() {
+			$("#uxNumChildren").val(minNumChildren + " - " + maxNumChildren);
+		}
+
+		function displayMaxNumLevels() {
+			$("#uxMaxNumLevels").val(maxNumLevels);
+		}
+
+		function displayMaxNumPoints() {
+			$("#uxMaxNumPoints").val(maxNumPoints);
+		}
+
+		function displayMinFPS() {
+			$("#uxMinFPS").val(minFPS);
+		}
+
+		function displayActualNumPoints() {
+			var numPoints = 0;
+			for (var ilevel = 0; ilevel < levels.length; ilevel++) {
+				numPoints += levels[ilevel].points.length;
+			}
+
+			$("#uxActualNumPoints").val(numPoints);
+		}
+
+		function displayActualNumLevels() {
+			$("#uxActualNumLevels").val(levels.length);
+		}
+
+		function Level(numChildren, childrenSpread, childrenDistance) {
+			this.numChildren = numChildren;
+			this.childrenSpread = childrenSpread;
+			this.childrenDistance = childrenDistance;
+
+			this.childrenSpreadV = 0;
+			this.childrenDistanceV = 0;
+
+			this.childrenSpreadA = 0;
+			this.childrenDistanceA = 0;
+
+			this.childrenSpreadJ = 0;
+			this.childrenDistanceJ = 0;
+
+			this.color = "#FFFFFF";
+
+			this.points = new Array();
+		}
+
+		function Point(numChildren) {
+			this.children = new Array(numChildren);
+
+			this.a = 0;
+			this.x = 0;
+			this.y = 0;
+		}
+
+		function restart() {
+			init();
+			run();
+		}
+
+		var desiredMinFPS;
+		function init() {
+			if (runTimeout) {
+				clearTimeout(runTimeout);
+				runTimeout = null;
+			}
+
+			canvas = $("#uxCanvas")[0];
+			context = canvas.getContext("2d");
+			width = canvas.width;
+			height = canvas.height;
+
+			desiredMinFPS = minFPS;
+
+			var numPoints = 1; // Always going to have a root point
+			var numLeaves = 1; // The root point is a leaf at the start
+			var numChildren = 0;
+
+			levels = new Array();
+
+			var done = false;
+			while (!done) {
+				if (!restrictNumLevels || levels.length < maxNumLevels) {
+					var tempNumChildren = toInt(minNumChildren + ((maxNumChildren - minNumChildren + 1) * Math.random()));
+					var tempNumLeaves = numLeaves * tempNumChildren;
+					var tempNumPoints = numPoints + tempNumLeaves;
+
+					while (restrictNumPoints && (tempNumPoints > maxNumPoints && tempNumChildren >= minNumChildren)) {
+						tempNumChildren--;
+						tempNumLeaves = numLeaves * tempNumChildren;
+						tempNumPoints = numPoints + tempNumLeaves;
+					}
+
+					if (!restrictNumPoints || (tempNumPoints <= maxNumPoints && tempNumChildren >= minNumChildren)) {
+						numChildren = tempNumChildren;
+						numLeaves = tempNumLeaves;
+						numPoints = tempNumPoints;
+
+						var childrenSpread = ilevel == 0 ? 1 : Math.max(0.1, 0.5 * Math.random());
+						var childrenDistance = Math.max(0.1, Math.random());
+						var level = new Level(numChildren, childrenSpread, childrenDistance);
+						levels.push(level);
+					}
+					else {
+						done = true;
+					}
+				}
+				else {
+					done = true;
+				}
+			}
+
+			for (var ilevel = 0; ilevel < levels.length; ilevel++) {
+				var h = toInt(240 - (90 * (ilevel / (levels.length - 1))));
+				var s = 100;
+				var l = 25;
+				var a = 0.75;
+				levels[ilevel].color = "hsla(" + h + ", " + s + "%, " + l + "%, " + a + ")";
+			}
+
+			var root = new Point(levels[0].numChildren);
+			root.x = toInt(width / 2);
+			root.y = toInt(height / 2);
+			levels[0].points.push(root);
+
+			initChildren(0, root);
+
+			displayActualNumPoints();
+			displayActualNumLevels();
+		}
+
+		function initChildren(ilevel, parent) {
+			if (ilevel < levels.length) {
+				for (var ichild = 0; ichild < levels[ilevel].numChildren; ichild++) {
+					var child = null;
+					if (ilevel + 1 < levels.length) {
+						var level = levels[ilevel + 1];
+						child = new Point(level.numChildren);
+						level.points.push(child);
+					}
+					else {
+						child = new Point(0);
+					}
+
+					parent.children[ichild] = child;
+
+					initChildren(ilevel + 1, child);
+				}
+			}
+		}
+
+		function run() {
+			var startTime = new Date().getTime();
+			iterate();
+			var endTime = new Date().getTime();
+			var dTime = endTime - startTime;
+			var waitTime = Math.max(1, 33 - dTime);
+
+			frameCount++;
+			var dFrame = endTime - frameCountStart;
+			if (dFrame > 1000) {
+				var frameRate = toInt(frameCount / (0.001 * dFrame));
+				$("#uxActualFPS").val(frameRate);
+
+				frameCount = 0;
+				frameCountStart = endTime;
+
+				if (restrictFPS && frameRate <= desiredMinFPS) {
+					slowCount++;
+					if (slowCount > 5) {
+						if (levels.length > 2) {
+							levels.length = levels.length - 1;
+							displayActualNumPoints();
+							displayActualNumLevels();
+						}
+						slowCount = 0;
+					}
+				}
+				else {
+					slowCount = 0;
+				}
+
+			}
+
+			runTimeout = setTimeout(function () { run() }, waitTime);
+		}
+
+		function iterate() {
+			context.beginPath();
+			context.rect(0, 0, width - 1, height - 1);
+			context.fillStyle = "#ffffff";
+			context.fill();
+
+			var childrenDistanceSum = 0;
+			for (var ilevel = 0; ilevel < levels.length; ilevel++) {
+				var level = levels[ilevel];
+
+				iterateChildrenDistance(level);
+				childrenDistanceSum += level.childrenDistance;
+
+				if (ilevel != 0) {
+					iterateChildrenSpread(level);
+				}
+
+				var levelPoints = level.points;
+				context.beginPath();
+				for (var ipoint = 0; ipoint < levelPoints.length; ipoint++) {
+					var parent = levelPoints[ipoint];
+
+					if (ilevel == 0 && ipoint == 0) {
+						var ad = (2 * Math.PI) / level.numChildren;
+					}
+					else {
+						var ad = (2 * Math.PI * level.childrenSpread) / (level.numChildren - 1);
+					}
+					var a0 = parent.a - ((2 * Math.PI * level.childrenSpread) / 2);
+
+					var a = a0;
+
+					for (var ichild = 0; ichild < level.numChildren; ichild++) {
+						var child = parent.children[ichild];
+
+						child.a = a;
+						child.x = parent.x + (scale * level.childrenDistance * Math.cos(a));
+						child.y = parent.y + (scale * level.childrenDistance * Math.sin(a));
+
+						a += ad;
+
+						context.moveTo(toInt(parent.x), toInt(parent.y));
+						context.lineTo(toInt(child.x), toInt(child.y));
+					}
+				}
+				context.strokeStyle = level.color;
+				context.stroke();
+			}
+			scale = 0.99 * (Math.min(width, height) / (2 * childrenDistanceSum));
+		}
+
+		function iterateChildrenDistance(level) {
+			level.childrenDistanceJ = 0.0001 * (2 * Math.random() - 1);
+
+			level.childrenDistanceA += level.childrenDistanceJ;
+
+			level.childrenDistanceV *= 0.6; // drag
+			level.childrenDistanceV += level.childrenDistanceA;
+
+			level.childrenDistance += level.childrenDistanceV;
+
+			if (level.childrenDistance < 0.01) {
+				level.childrenDistance = 0.01;
+				level.childrenDistanceA = 0.001;
+			}
+			if (level.childrenDistance > 2) {
+				level.childrenDistance = 2;
+				level.childrenDistanceA = -0.001;
+			}
+		}
+
+		function iterateChildrenSpread(level) {
+			level.childrenSpreadJ = 0.00001 * (2 * Math.random() - 1);
+
+			level.childrenSpreadA += level.childrenSpreadJ;
+
+			level.childrenSpreadV *= 0.6;
+			level.childrenSpreadV += level.childrenSpreadA;
+
+			level.childrenSpread += level.childrenSpreadV;
+
+			if (level.childrenSpreadV > 0.01) {
+				level.childrenSpreadV = 0.01;
+				level.childrenDistanceA = -0.001;
+			}
+			if (level.childrenSpreadV < -0.01) {
+				level.childrenSpreadV = -0.01;
+				level.childrenDistanceA = 0.0001;
+				level.childrenDistanceA = 0.001;
+			}
+
+			if (level.childrenSpread > 1) level.childrenSpread = -1;
+			if (level.childrenSpread < -1) level.childrenSpread = 1;
+		}
+
+		function toInt(value) { return ~ ~value; }
+	</script>
+</head>
+<body style="background-color: #ffffff;">
+	<div>
+		<canvas id="uxCanvas" width="600" height="600" style="display: block; margin-left: auto;
+			margin-right: auto;">
+Your browser does not support the HTML5 canvas tag.
+	</canvas>
+	</div>
+	<div id="uxConfig">
+		<div>
+			<label for="uxNumChildren">
+				Number of children</label>
+			<input type="text" id="uxNumChildren" readonly="readonly" />
+			<div id="uxNumChildrenSlider" />
+		</div>
+		<hr />
+		<div>
+			<div>
+				<label for="uxRestrictNumLevels">
+					Restrict by number of levels</label>
+				<input type="checkbox" id="uxRestrictNumLevels" />
+			</div>
+			<div>
+				<label for="uxMaxNumLevels">
+					Maximum number of levels</label>
+				<input type="text" id="uxMaxNumLevels" readonly="readonly" />
+				<label for="uxActualNumLevels">
+					Actual number of levels</label>
+				<input type="text" id="uxActualNumLevels" readonly="readonly" />
+				<div id="uxMaxNumLevelsSlider" />
+			</div>
+		</div>
+		<hr />
+		<div>
+			<div>
+				<label for="uxRestrictNumPoints">
+					Restrict by number of points</label>
+				<input type="checkbox" id="uxRestrictNumPoints" />
+			</div>
+			<div>
+				<label for="uxMaxNumPoints">
+					Maximum number of points</label>
+				<input type="text" id="uxMaxNumPoints" readonly="readonly" />
+				<label for="uxActualNumPoints">
+					Actual number of points</label>
+				<input type="text" id="uxActualNumPoints" readonly="readonly" />
+				<div id="uxMaxNumPointsSlider" />
+			</div>
+		</div>
+		<hr />
+		<div>
+			<div>
+				<label for="uxRestrictFPS">
+					Restrict by frames per second</label>
+				<input type="checkbox" id="uxRestrictFPS" />
+			</div>
+			<div>
+				<label for="uxMinFPS">
+					Minimum frames per second</label>
+				<input type="text" id="uxMinFPS" readonly="readonly" />
+				<label for="uxActualFPS">
+					Actual frames per second</label>
+				<input type="text" id="uxActualFPS" readonly="readonly" />
+				<div id="uxMinFPSSlider" />
+			</div>
+		</div>
+		<hr />
+		<div>
+			<input type="submit" id="uxNew" value="New" /></div>
+	</div>
+</body>
+</html>
